@@ -1,0 +1,33 @@
+	=================================
+	=== REST Gateway Plugin
+	=================================
+
+TODO: -API Key (Only allow access from registered agents)
+	-User authentication to get user data
+	-XML result sets (only returns JSON for now)
+
+The REST gateway plugin gets information on a journal in JSON format via HTTP. 
+It can be addressed with the following URL pattern:
+
+http://localhost/ojs2/index.php/myJournal/gateway/plugin/RestPlugin/...
+
+...where, of course, localhost is the local server name, ojs2 is the path
+to the OJS 2.x installation, and myJournal is the path to a particular
+journal.
+
+The plugin must be enabled in order to respond to requests. To enable the
+plugin, or ensure that it is sufficiently configured, log into the Journal
+Manager's "System Plugins" page, find the REST Plugin under the
+"Gateway Plugins" page, and click "Enable".
+
+The plugin has the following methods to request data:
+
+(TODO)
+
+http://.../RestPlugin/
+http://.../RestPlugin/
+http://.../RestPlugin/
+http://.../RestPlugin/
+http://.../RestPlugin/
+http://.../RestPlugin/
+
