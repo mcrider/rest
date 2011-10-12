@@ -2,11 +2,7 @@
 	=== REST Gateway Plugin
 	=================================
 
-TODO: -API Key (Only allow access from registered agents)
-	-User authentication to get user data
-	-XML result sets (only returns JSON for now)
-
-The REST gateway plugin gets information on a journal in JSON format via HTTP. 
+The REST gateway plugin gets information on a journal in JSON format via HTTP.
 It can be addressed with the following URL pattern:
 
 http://localhost/ojs2/index.php/myJournal/gateway/plugin/RestPlugin/...
@@ -22,12 +18,16 @@ Manager's "System Plugins" page, find the REST Plugin under the
 
 The plugin has the following methods to request data:
 
-(TODO)
+http://.../RestPlugin/journalInfo -- Get general info about a journal.
+http://.../RestPlugin/articleInfo/X -- Get data on article number 'X'.
+http://.../RestPlugin/currentIssueData -- Get metadata for the current issue.
+http://.../RestPlugin/currentIssueDataWithArticles -- Get metadata for the current issue and all its articles.
+http://.../RestPlugin/allIssueData -- Get metadata for all issues.  If the additional parameter is set to 1, all articles will be included.
+http://.../RestPlugin/allIssueDataWithArticles -- Get metadata for all issues, along with all their articles.
+http://.../RestPlugin/announcements -- Retrieve all announcements in chronological order
 
-http://.../RestPlugin/
-http://.../RestPlugin/
-http://.../RestPlugin/
-http://.../RestPlugin/
-http://.../RestPlugin/
-http://.../RestPlugin/
-
+TODO:
+	-API Key (Only allow access from registered agents)
+	-User authentication to get user data
+	-XML result sets (only returns JSON for now)
+	-More methods into the system, beefier API, as well as better API documentation
