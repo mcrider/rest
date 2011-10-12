@@ -7,9 +7,9 @@
  * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
  *
  * @class RestPlugin
- * @ingroup plugins_gateways_resolver
+ * @ingroup plugins_gateways_rest
  *
- * @brief Simple resolver gateway plugin
+ * @brief OJS REST gateway plugin.  Retrieve JSON-formatted information from an OJS installation via HTTP calls .
  */
 
 
