@@ -73,6 +73,7 @@ class RestPlugin extends GatewayPlugin {
 		switch ($operator) {
 			case 'journalInfo': // Basic journal metadata
 				$response = array(
+								'type' => 'journalInfo',
 								'id' => $journal->getId(),
 								'title' => $journal->getLocalizedTitle(),
 								'url' => $journal->getUrl(),
@@ -80,25 +81,25 @@ class RestPlugin extends GatewayPlugin {
 								'description' => $journal->getLocalizedDescription(),
 							);
 
-				echo json_encode($response);
+				echo json_encode(array('items' => $response));
 				break;
 			case 'articleInfo': // Article metadata
 				// Takes article ID as input
 				$articleId = (int) array_shift($args);
 				$response = $this->_getArticleInfo($request, $articleId);
-				echo json_encode($response);
+				echo json_encode(array('items' => $response));
 				break;
 			case 'currentIssueData': // Current issue metadata
 				$issue =& $issueDao->getCurrentIssue($journal->getId(), true);
 
 				$response = $this->_getIssueInfo($request, $issue);
-				echo json_encode($response);
+				echo json_encode(array('items' => $response));
 				break;
 			case 'currentIssueDataWithArticles': // Current issue metadata along with all included article metadata
 				$issue =& $issueDao->getCurrentIssue($journal->getId(), true);
 
 				$response = $this->_getIssueInfo($request, $issue, true);
-				echo json_encode($response);
+				echo json_encode(array('items' => array($response)));
 				break;
 			case 'allIssueData': // Metadata for all published issues
 				$issues =& $issueDao->getPublishedIssues($journal->getId());
@@ -108,7 +109,7 @@ class RestPlugin extends GatewayPlugin {
 					$response[] = $this->_getIssueInfo($request, $issue);
 					unset($issue);
 				}
-				echo json_encode($response);
+				echo json_encode(array('items' => $response));
 				break;
 			case 'allIssueDataWithArticles': // Metadata for all published issues and all their articles (can be big!)
 				$issues =& $issueDao->getPublishedIssues($journal->getId());
@@ -118,7 +119,22 @@ class RestPlugin extends GatewayPlugin {
 					$response[] = $this->_getIssueInfo($request, $issue, true);
 					unset($issue);
 				}
-				echo json_encode($response);
+				echo json_encode(array('items' => $response));
+				break;
+			case 'allArticles': // All articles in a flat array (not nested under issues)
+				$issues =& $issueDao->getPublishedIssues($journal->getId());
+				$publishedArticleDao =& DAORegistry::getDAO('PublishedArticleDAO');
+
+				$response = array();
+				while ($issue =& $issues->next()) {
+					$publishedArticles =& $publishedArticleDao->getPublishedArticles($issue->getId());
+
+					foreach($publishedArticles as $publishedArticle) {
+						$response[] = $this->_getArticleInfo($request, $publishedArticle->getId());
+					}
+					unset($issue);
+				}
+				echo json_encode(array('items' => $response));
 				break;
 			case 'announcements': // Announcements
 				$announcementDao =& DAORegistry::getDAO('AnnouncementDAO');
@@ -136,7 +152,7 @@ class RestPlugin extends GatewayPlugin {
 					unset($announcement);
 				}
 
-				echo json_encode($response);
+				echo json_encode(array('items' => $response));
 				break;
 			default:
 				// Not a valid request
@@ -166,6 +182,7 @@ class RestPlugin extends GatewayPlugin {
 		Locale::requireComponents(array(LOCALE_COMPONENT_APPLICATION_COMMON));
 
 		$response = array(
+			'type' => 'issueInfo',
 			'url' => $request->url(null, 'issue', 'view', $issue->getId()),
 			'issueId' => $issue->getId(),
 			'title' => $issue->getLocalizedTitle(),
@@ -199,9 +216,19 @@ class RestPlugin extends GatewayPlugin {
 	 */
 	 function _getArticleInfo(&$request, $articleId) {
 		$articleDao =& DAORegistry::getDAO('ArticleDAO');
-		$article =& $articleDao->getArticle($articleId);
+		$publishedArticleDao =& DAORegistry::getDAO('PublishedArticleDAO');
+
+		$article =& $publishedArticleDao->getPublishedArticleByArticleId($articleId);
+		if(!$article) {
+			$article =& $articleDao->getArticle($articleId);
+		} else {
+			$published = true;
+		}
 
 		if(!isset($article)) $this->showError();
+
+		$journalDao =& DAORegistry::getDAO('JournalDAO');
+		$journal =& $journalDao->getJournal($article->getJournalId());
 
 		// Create an array of author information
 		$authors =& $article->getAuthors();
@@ -228,6 +255,7 @@ class RestPlugin extends GatewayPlugin {
 
 		// Construct the article response data to be encoded
 		$response = array(
+			'type' => 'articleInfo',
 			'url' => $request->url(null, 'article', 'view', $articleId),
 			'id' => $articleId,
 			'title' => $article->getLocalizedTitle(),
@@ -246,6 +274,26 @@ class RestPlugin extends GatewayPlugin {
 		if($article->getLocalizedType()) $response['type'] = $article->getLocalizedType();
 		if($article->getLocalizedSponsor()) $response['sponsor'] = $article->getLocalizedSponsor();
 		if($article->getCitations()) $response['citations'] = $article->getCitations();
+		if($published) $response['datePublished'] = $article->getDatePublished();
+
+		// Add galleys
+		if($published) {
+			$galleys =& $article->getGalleys();
+			foreach ($galleys as $galley) {
+				if ($galley->isHTMLGalley()) {
+					$response['htmlUrl'] = $request->url(null, 'article', 'viewFile', array(
+						$article->getId(),
+						$galley->getBestGalleyId($journal)
+					));
+				} elseif ($galley->isPDFGalley()) {
+					$response['pdfUrl'] = $request->url(null, 'article', 'viewFile', array(
+                                                $article->getId(),
+                                                $galley->getBestGalleyId($journal)
+                                        )); 
+				}
+			}
+		}
+
 
 		return $response;
 	 }
