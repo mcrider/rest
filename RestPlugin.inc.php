@@ -14,6 +14,7 @@
 
 
 import('classes.plugins.GatewayPlugin');
+import('classes.file.PublicFileManager');
 
 class RestPlugin extends GatewayPlugin {
 	/**
@@ -68,12 +69,14 @@ class RestPlugin extends GatewayPlugin {
 		if (!isset($journal)) $this->showError();
 
 		$issueDao =& DAORegistry::getDAO('IssueDAO');
+		
+		$journalId = $journal->getId();
 
 		$operator = array_shift($args);
 		switch ($operator) {
 			case 'journalInfo': // Basic journal metadata
 				$response = array(
-								'id' => $journal->getId(),
+								'id' => $journalId,
 								'title' => $journal->getLocalizedTitle(),
 								'url' => $journal->getUrl(),
 								'initials' => $journal->getLocalizedInitials(),
@@ -88,41 +91,58 @@ class RestPlugin extends GatewayPlugin {
 				$response = $this->_getArticleInfo($request, $articleId);
 				echo json_encode($response);
 				break;
-			case 'currentIssueData': // Current issue metadata
-				$issue =& $issueDao->getCurrentIssue($journal->getId(), true);
+			case 'issueData': // Issue metadata
+				//Takes article ID as input
+				$issueId = (int) array_shift($args);
+				$issue =& $issueDao->getIssueById($issueId, $journalId);
 
-				$response = $this->_getIssueInfo($request, $issue);
+				$response = $this->_getIssueInfo($request, $journalId, $issue);
+				echo json_encode($response);
+				break;								
+			case 'issueDataWithArticles': //Issue metadata along with all included article metadata
+				// Takes issue ID as input
+				$issueId = (int) array_shift($args);
+				
+				$issue =& $issueDao->getIssueById($issueId, $journalId);
+				
+				$response = $this->_getIssueInfo($request, $journalId, $issue, true);
+				echo json_encode($response);
+				break;
+			case 'currentIssueData': // Current issue metadata
+				$issue =& $issueDao->getCurrentIssue($journalId, true);
+				
+				$response = $this->_getIssueInfo($request, $journalId, $issue);
 				echo json_encode($response);
 				break;
 			case 'currentIssueDataWithArticles': // Current issue metadata along with all included article metadata
-				$issue =& $issueDao->getCurrentIssue($journal->getId(), true);
-
-				$response = $this->_getIssueInfo($request, $issue, true);
+				$issue =& $issueDao->getCurrentIssue($journalId, true);
+				
+				$response = $this->_getIssueInfo($request, $journalId, $issue, true);
 				echo json_encode($response);
-				break;
+				break;				
 			case 'allIssueData': // Metadata for all published issues
-				$issues =& $issueDao->getPublishedIssues($journal->getId());
+				$issues =& $issueDao->getPublishedIssues($journalId);
 
 				$response = array();
 				while ($issue =& $issues->next()) {
-					$response[] = $this->_getIssueInfo($request, $issue);
+					$response[] = $this->_getIssueInfo($request, $journalId, $issue);
 					unset($issue);
 				}
 				echo json_encode($response);
 				break;
 			case 'allIssueDataWithArticles': // Metadata for all published issues and all their articles (can be big!)
-				$issues =& $issueDao->getPublishedIssues($journal->getId());
+				$issues =& $issueDao->getPublishedIssues($journalId);
 
 				$response = array();
 				while ($issue =& $issues->next()) {
-					$response[] = $this->_getIssueInfo($request, $issue, true);
+					$response[] = $this->_getIssueInfo($request, $journalId, $issue, true);
 					unset($issue);
 				}
 				echo json_encode($response);
 				break;
 			case 'announcements': // Announcements
 				$announcementDao =& DAORegistry::getDAO('AnnouncementDAO');
-				$announcements =& $announcementDao->getAnnouncementsNotExpiredByAssocId(ASSOC_TYPE_JOURNAL, $journal->getId());
+				$announcements =& $announcementDao->getAnnouncementsNotExpiredByAssocId(ASSOC_TYPE_JOURNAL, $journalId);
 
 				$response = array();
 				while($announcement =& $announcements->next()) {
@@ -157,14 +177,22 @@ class RestPlugin extends GatewayPlugin {
 	/**
 	 * Get data for an issue
 	 * @param $request PKPRequest
+	 * @param $journalId The journal ID
 	 * @param $issueId Object
 	 * @param $withArticles boolean Whether to include the issue's articles in the response
 	 */
-	function _getIssueInfo(&$request, $issue, $withArticles = false) {
+	function _getIssueInfo(&$request, $journalId, $issue, $withArticles = false) {
 		if(!isset($issue)) $this->showError();
 
 		Locale::requireComponents(array(LOCALE_COMPONENT_APPLICATION_COMMON));
-
+		
+		//Handle getting the image URL
+		$publicFileManager = new PublicFileManager();
+		$coverPagePath = $request->getBaseUrl() . '/';
+		$coverPagePath .= $publicFileManager->getJournalFilesPath($journalId) . '/';
+		$imageFileName = $issue->getIssueFileName();
+		$imageUrl = $coverPagePath . $imageFileName;
+		
 		$response = array(
 			'url' => $request->url(null, 'issue', 'view', $issue->getId()),
 			'issueId' => $issue->getId(),
@@ -174,7 +202,9 @@ class RestPlugin extends GatewayPlugin {
 			'volume' => $issue->getVolume(),
 			'number' => $issue->getNumber(),
 			'year' => $issue->getYear(),
-			'datePublished' => $issue->getDatePublished()
+			'datePublished' => $issue->getDatePublished(),
+			'imageUrl' => $imageUrl,
+			'imageDescription' => $issue->getIssueCoverPageDescription()
 		);
 
 		if ($withArticles) {
@@ -187,7 +217,7 @@ class RestPlugin extends GatewayPlugin {
 			}
 			$response['articles'] = $articles;
 		}
-
+		
 		return $response;
 	}
 
@@ -235,9 +265,23 @@ class RestPlugin extends GatewayPlugin {
 			'authorString' => $article->getAuthorString(),
 			'authors' => $authorInfo,
 			'sectionId' => $article->getSectionId(),
-			'sectionTitle' => $article->getSectionTitle(),
+			'sectionTitle' => $article->getSectionTitle()
 		);
-
+		
+		$articleGalleyDAO =& DAORegistry::getDAO('ArticleGalleyDAO');
+		$articleGalleys =& $articleGalleyDAO->getGalleysByArticle($articleId);
+		$galleysResponse = array();
+		foreach ($articleGalleys as $articleGalley){
+    			$galleyId = $articleGalley->getId();
+    			$galleyInfo = array(
+    				'id' => $galleyId,
+    				'label' => $articleGalley->getLabel(),
+    				'url' => Request::url(null, 'article', 'viewFile', array($articleId, $galleyId))
+    			);
+    			$galleysResponse[] = $galleyInfo;
+		}
+		$response['galleys'] = $galleysResponse;
+		
 		// Add some optional metadata.  There may be other items the could be included here.
 		if($article->getLocalizedDiscipline()) $response['discipline'] = $article->getLocalizedDiscipline();
 		if($article->getLocalizedSubjectClass()) $response['subjectClass'] = $article->getLocalizedSubjectClass();

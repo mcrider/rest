@@ -20,6 +20,8 @@ The plugin has the following methods to request data:
 
 http://.../RestPlugin/journalInfo -- Get general info about a journal.
 http://.../RestPlugin/articleInfo/X -- Get data on article number 'X'.
+http://.../RestPlugin/issueData/X -- Get metadata on issue number 'X'.
+http://.../RestPlugin/issueDataWithArticles/X -- Get metadata on issue number 'X' and all its articles.
 http://.../RestPlugin/currentIssueData -- Get metadata for the current issue.
 http://.../RestPlugin/currentIssueDataWithArticles -- Get metadata for the current issue and all its articles.
 http://.../RestPlugin/allIssueData -- Get metadata for all issues.  If the additional parameter is set to 1, all articles will be included.
