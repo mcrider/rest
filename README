@@ -33,6 +33,7 @@ http://.../RestPlugin/allIssueData -- Get metadata for all issues.  If the addit
 http://.../RestPlugin/allIssueDataWithArticles -- Get metadata for all issues, along with all their articles.
 http://.../RestPlugin/announcements -- Retrieve all announcements in chronological order
 http://.../RestPlugin/userAdd -- Add a user.
+http://.../RestPlugin/userEnroll -- Enroll specified user to specified roll.
 
 TODO:
 	-User authentication to get user data

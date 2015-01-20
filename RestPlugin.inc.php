@@ -26,6 +26,7 @@ class RestPlugin extends GatewayPlugin {
 	 */
 	function register($category, $path) {
 		$success = parent::register($category, $path);
+		HookRegistry::register ('Request::redirect', array(&$this, 'preventRedirect'));
 		$this->addLocaleData();
 		return $success;
 	}
@@ -110,12 +111,13 @@ class RestPlugin extends GatewayPlugin {
 		// Check request is authenticated via API Key.
 		$requestData = $request->getUserVars();
 		if (is_null($requestData['apiKey']) || $requestData['apiKey'] != $this->getSetting($journalId, 'apiKey')) {
-			return false;
+			$this->showError();
 		}
 		unset($requestData['apiKey']);
 
 		$issueDao =& DAORegistry::getDAO('IssueDAO');
 
+		$response = FALSE;
 		$operator = array_shift($args);
 		switch ($operator) {
 			case 'journalInfo': // Basic journal metadata
@@ -126,14 +128,11 @@ class RestPlugin extends GatewayPlugin {
 								'initials' => $journal->getLocalizedInitials(),
 								'description' => $journal->getLocalizedDescription(),
 							);
-
-				echo json_encode($response);
 				break;
 			case 'articleInfo': // Article metadata
 				// Takes article ID as input
 				$articleId = (int) array_shift($args);
 				$response = $this->_getArticleInfo($request, $articleId);
-				echo json_encode($response);
 				break;
 			case 'issueData': // Issue metadata
 				//Takes article ID as input
@@ -141,7 +140,6 @@ class RestPlugin extends GatewayPlugin {
 				$issue =& $issueDao->getIssueById($issueId, $journalId);
 
 				$response = $this->_getIssueInfo($request, $journalId, $issue);
-				echo json_encode($response);
 				break;
 			case 'issueDataWithArticles': //Issue metadata along with all included article metadata
 				// Takes issue ID as input
@@ -150,19 +148,16 @@ class RestPlugin extends GatewayPlugin {
 				$issue =& $issueDao->getIssueById($issueId, $journalId);
 
 				$response = $this->_getIssueInfo($request, $journalId, $issue, true);
-				echo json_encode($response);
 				break;
 			case 'currentIssueData': // Current issue metadata
 				$issue =& $issueDao->getCurrentIssue($journalId, true);
 
 				$response = $this->_getIssueInfo($request, $journalId, $issue);
-				echo json_encode($response);
 				break;
 			case 'currentIssueDataWithArticles': // Current issue metadata along with all included article metadata
 				$issue =& $issueDao->getCurrentIssue($journalId, true);
 
 				$response = $this->_getIssueInfo($request, $journalId, $issue, true);
-				echo json_encode($response);
 				break;
 			case 'allIssueData': // Metadata for all published issues
 				$issues =& $issueDao->getPublishedIssues($journalId);
@@ -172,7 +167,6 @@ class RestPlugin extends GatewayPlugin {
 					$response[] = $this->_getIssueInfo($request, $journalId, $issue);
 					unset($issue);
 				}
-				echo json_encode($response);
 				break;
 			case 'allIssueDataWithArticles': // Metadata for all published issues and all their articles (can be big!)
 				$issues =& $issueDao->getPublishedIssues($journalId);
@@ -182,7 +176,6 @@ class RestPlugin extends GatewayPlugin {
 					$response[] = $this->_getIssueInfo($request, $journalId, $issue, true);
 					unset($issue);
 				}
-				echo json_encode($response);
 				break;
 			case 'announcements': // Announcements
 				$announcementDao =& DAORegistry::getDAO('AnnouncementDAO');
@@ -199,8 +192,6 @@ class RestPlugin extends GatewayPlugin {
 					);
 					unset($announcement);
 				}
-
-				echo json_encode($response);
 				break;
 			case 'userAdd':
 				$user = new User();
@@ -211,13 +202,24 @@ class RestPlugin extends GatewayPlugin {
 				if (!$userDao->insertUser($user)) {
 					return false;
 				}
-
-				echo json_encode($user);
+				$response = $user;
 				break;
-			default:
-				// Not a valid request
-				$this->showError();
+			case 'userEnroll':
+				if (isset($requestData['userId']) && isset($requestData['roleId'])) {
+					import('pages.manager.PeopleHandler');
+					$handler = new PeopleHandler($request);
+					$handler->_checks = array();
+					$handler->enroll($args);
+
+					$roleDao =& DAORegistry::getDAO('RoleDAO');
+					$response = $roleDao->userHasRole($journalId, $requestData['userId'], $requestData['roleId']);
+				}
+				break;
 		}
+		if (!$response) {
+			$this->showError();
+		}
+		echo json_encode($response);
 		return true;
 	}
 
@@ -349,6 +351,10 @@ class RestPlugin extends GatewayPlugin {
 
 		return $response;
 	 }
+
+	function preventRedirect($url) {
+		return TRUE;
+	}
 }
 
 ?>
