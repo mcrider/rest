@@ -108,13 +108,11 @@ class RestPlugin extends GatewayPlugin {
 		$journalId = $journal->getId();
 
 		// Check request is authenticated via API Key.
-		$apiKey = $request->getUserVar('apiKey');
-		if (is_null($apiKey) || $apiKey != $this->getSetting($journalId, 'apiKey')) {
+		$requestData = $request->getUserVars();
+		if (is_null($requestData['apiKey']) || $requestData['apiKey'] != $this->getSetting($journalId, 'apiKey')) {
 			return false;
 		}
-
-		// Ensure user is authenticated.
-		$user = new UserDAO();
+		unset($requestData['apiKey']);
 
 		$issueDao =& DAORegistry::getDAO('IssueDAO');
 
@@ -203,6 +201,18 @@ class RestPlugin extends GatewayPlugin {
 				}
 
 				echo json_encode($response);
+				break;
+			case 'userAdd':
+				$user = new User();
+				foreach ($requestData as $key => $value) {
+					$user->setData($key, $value);
+				}
+				$userDao =& DAORegistry::getDAO('UserDAO');
+				if (!$userDao->insertUser($user)) {
+					return false;
+				}
+
+				echo json_encode($user);
 				break;
 			default:
 				// Not a valid request

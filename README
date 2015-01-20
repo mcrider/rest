@@ -32,6 +32,7 @@ http://.../RestPlugin/currentIssueDataWithArticles -- Get metadata for the curre
 http://.../RestPlugin/allIssueData -- Get metadata for all issues.  If the additional parameter is set to 1, all articles will be included.
 http://.../RestPlugin/allIssueDataWithArticles -- Get metadata for all issues, along with all their articles.
 http://.../RestPlugin/announcements -- Retrieve all announcements in chronological order
+http://.../RestPlugin/userAdd -- Add a user.
 
 TODO:
 	-User authentication to get user data
