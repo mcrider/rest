@@ -5,16 +5,21 @@
 The REST gateway plugin gets information on a journal in JSON format via HTTP.
 It can be addressed with the following URL pattern:
 
-http://localhost/ojs2/index.php/myJournal/gateway/plugin/RestPlugin/...
+http://localhost/ojs2/index.php/myJournal/gateway/plugin/RestPlugin/...?apiKey=APIKEY
 
 ...where, of course, localhost is the local server name, ojs2 is the path
-to the OJS 2.x installation, and myJournal is the path to a particular
-journal.
+to the OJS 2.x installation, myJournal is the path to a particular
+journal, and APIKEY is your unique API key.
 
 The plugin must be enabled in order to respond to requests. To enable the
 plugin, or ensure that it is sufficiently configured, log into the Journal
 Manager's "System Plugins" page, find the REST Plugin under the
 "Gateway Plugins" page, and click "Enable".
+
+Once enabled, an API Key is generated (which can be changed) that is needed
+to authenticate all requests. To get or change the API Key, log into the
+Journal Manager's "System Plugins" page, find the REST Plugin under the
+"Gateway Plugins" page, and click "Settings".
 
 The plugin has the following methods to request data:
 
@@ -27,9 +32,10 @@ http://.../RestPlugin/currentIssueDataWithArticles -- Get metadata for the curre
 http://.../RestPlugin/allIssueData -- Get metadata for all issues.  If the additional parameter is set to 1, all articles will be included.
 http://.../RestPlugin/allIssueDataWithArticles -- Get metadata for all issues, along with all their articles.
 http://.../RestPlugin/announcements -- Retrieve all announcements in chronological order
+http://.../RestPlugin/userAdd -- Add a user.
+http://.../RestPlugin/userEnroll -- Enroll specified user to specified roll.
 
 TODO:
-	-API Key (Only allow access from registered agents)
 	-User authentication to get user data
 	-XML result sets (only returns JSON for now)
 	-More methods into the system, beefier API, as well as better API documentation

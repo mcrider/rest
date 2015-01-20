@@ -15,6 +15,7 @@
 
 import('classes.plugins.GatewayPlugin');
 import('classes.file.PublicFileManager');
+import('classes.user.UserDAO');
 
 class RestPlugin extends GatewayPlugin {
 	/**
@@ -25,6 +26,7 @@ class RestPlugin extends GatewayPlugin {
 	 */
 	function register($category, $path) {
 		$success = parent::register($category, $path);
+		HookRegistry::register ('Request::redirect', array(&$this, 'preventRedirect'));
 		$this->addLocaleData();
 		return $success;
 	}
@@ -48,14 +50,50 @@ class RestPlugin extends GatewayPlugin {
 	}
 
 	function getDisplayName() {
-		return Locale::translate('plugins.gateways.rest.displayName');
+		return AppLocale::translate('plugins.gateways.rest.displayName');
 	}
 
 	function getDescription() {
-		return Locale::translate('plugins.gateways.rest.description');
+		return AppLocale::translate('plugins.gateways.rest.description');
 	}
 
-	/**
+	function getManagementVerbs() {
+		$verbs = parent::getManagementVerbs();
+		if (!$this->getEnabled()) return $verbs;
+		$verbs[] = array(
+			'settings', __('plugins.gateways.metsGateway.settings')
+		);
+		return $verbs;
+	}
+
+	function manage($verb, $args) {
+		if (parent::manage($verb, $args)) return true;
+		if (!$this->getEnabled()) return false;
+		switch ($verb) {
+			case 'settings':
+				$journal =& Request::getJournal();
+				$this->import('SettingsForm');
+				$form = new SettingsForm($this, $journal->getId());
+				if (Request::getUserVar('save')) {
+					$form->readInputData();
+					if ($form->validate()) {
+						$form->execute();
+						Request::redirect(null, null, 'plugins');
+					} else {
+						$form->display();
+					}
+				} else {
+					$form->initData();
+					$form->display();
+				}
+				break;
+			default:
+				return false;
+		}
+		return true;
+	}
+
+  /**
 	 * Handle fetch requests for this plugin.
 	 * @param $args array
 	 * @param $request PKPRequest
@@ -68,10 +106,18 @@ class RestPlugin extends GatewayPlugin {
 		$journal =& $request->getJournal();
 		if (!isset($journal)) $this->showError();
 
-		$issueDao =& DAORegistry::getDAO('IssueDAO');
-		
 		$journalId = $journal->getId();
 
+		// Check request is authenticated via API Key.
+		$requestData = $request->getUserVars();
+		if (is_null($requestData['apiKey']) || $requestData['apiKey'] != $this->getSetting($journalId, 'apiKey')) {
+			$this->showError();
+		}
+		unset($requestData['apiKey']);
+
+		$issueDao =& DAORegistry::getDAO('IssueDAO');
+
+		$response = FALSE;
 		$operator = array_shift($args);
 		switch ($operator) {
 			case 'journalInfo': // Basic journal metadata
@@ -82,14 +128,11 @@ class RestPlugin extends GatewayPlugin {
 								'initials' => $journal->getLocalizedInitials(),
 								'description' => $journal->getLocalizedDescription(),
 							);
-
-				echo json_encode($response);
 				break;
 			case 'articleInfo': // Article metadata
 				// Takes article ID as input
 				$articleId = (int) array_shift($args);
 				$response = $this->_getArticleInfo($request, $articleId);
-				echo json_encode($response);
 				break;
 			case 'issueData': // Issue metadata
 				//Takes article ID as input
@@ -97,29 +140,25 @@ class RestPlugin extends GatewayPlugin {
 				$issue =& $issueDao->getIssueById($issueId, $journalId);
 
 				$response = $this->_getIssueInfo($request, $journalId, $issue);
-				echo json_encode($response);
-				break;								
+				break;
 			case 'issueDataWithArticles': //Issue metadata along with all included article metadata
 				// Takes issue ID as input
 				$issueId = (int) array_shift($args);
-				
+
 				$issue =& $issueDao->getIssueById($issueId, $journalId);
-				
+
 				$response = $this->_getIssueInfo($request, $journalId, $issue, true);
-				echo json_encode($response);
 				break;
 			case 'currentIssueData': // Current issue metadata
 				$issue =& $issueDao->getCurrentIssue($journalId, true);
-				
+
 				$response = $this->_getIssueInfo($request, $journalId, $issue);
-				echo json_encode($response);
 				break;
 			case 'currentIssueDataWithArticles': // Current issue metadata along with all included article metadata
 				$issue =& $issueDao->getCurrentIssue($journalId, true);
-				
+
 				$response = $this->_getIssueInfo($request, $journalId, $issue, true);
-				echo json_encode($response);
-				break;				
+				break;
 			case 'allIssueData': // Metadata for all published issues
 				$issues =& $issueDao->getPublishedIssues($journalId);
 
@@ -128,7 +167,6 @@ class RestPlugin extends GatewayPlugin {
 					$response[] = $this->_getIssueInfo($request, $journalId, $issue);
 					unset($issue);
 				}
-				echo json_encode($response);
 				break;
 			case 'allIssueDataWithArticles': // Metadata for all published issues and all their articles (can be big!)
 				$issues =& $issueDao->getPublishedIssues($journalId);
@@ -138,7 +176,6 @@ class RestPlugin extends GatewayPlugin {
 					$response[] = $this->_getIssueInfo($request, $journalId, $issue, true);
 					unset($issue);
 				}
-				echo json_encode($response);
 				break;
 			case 'announcements': // Announcements
 				$announcementDao =& DAORegistry::getDAO('AnnouncementDAO');
@@ -155,13 +192,34 @@ class RestPlugin extends GatewayPlugin {
 					);
 					unset($announcement);
 				}
-
-				echo json_encode($response);
 				break;
-			default:
-				// Not a valid request
-				$this->showError();
+			case 'userAdd':
+				$user = new User();
+				foreach ($requestData as $key => $value) {
+					$user->setData($key, $value);
+				}
+				$userDao =& DAORegistry::getDAO('UserDAO');
+				if (!$userDao->insertUser($user)) {
+					return false;
+				}
+				$response = $user;
+				break;
+			case 'userEnroll':
+				if (isset($requestData['userId']) && isset($requestData['roleId'])) {
+					import('pages.manager.PeopleHandler');
+					$handler = new PeopleHandler($request);
+					$handler->_checks = array();
+					$handler->enroll($args);
+
+					$roleDao =& DAORegistry::getDAO('RoleDAO');
+					$response = $roleDao->userHasRole($journalId, $requestData['userId'], $requestData['roleId']);
+				}
+				break;
 		}
+		if (!$response) {
+			$this->showError();
+		}
+		echo json_encode($response);
 		return true;
 	}
 
@@ -170,7 +228,7 @@ class RestPlugin extends GatewayPlugin {
 	 */
 	function showError() {
 		header("HTTP/1.0 500 Internal Server Error");
-		echo Locale::translate('plugins.gateways.rest.errors.errorMessage');
+		echo AppLocale::translate('plugins.gateways.rest.errors.errorMessage');
 		exit;
 	}
 
@@ -184,15 +242,15 @@ class RestPlugin extends GatewayPlugin {
 	function _getIssueInfo(&$request, $journalId, $issue, $withArticles = false) {
 		if(!isset($issue)) $this->showError();
 
-		Locale::requireComponents(array(LOCALE_COMPONENT_APPLICATION_COMMON));
-		
+	  	AppLocale::requireComponents(array(LOCALE_COMPONENT_APPLICATION_COMMON));
+
 		//Handle getting the image URL
 		$publicFileManager = new PublicFileManager();
 		$coverPagePath = $request->getBaseUrl() . '/';
 		$coverPagePath .= $publicFileManager->getJournalFilesPath($journalId) . '/';
 		$imageFileName = $issue->getIssueFileName();
 		$imageUrl = $coverPagePath . $imageFileName;
-		
+
 		$response = array(
 			'url' => $request->url(null, 'issue', 'view', $issue->getId()),
 			'issueId' => $issue->getId(),
@@ -217,7 +275,7 @@ class RestPlugin extends GatewayPlugin {
 			}
 			$response['articles'] = $articles;
 		}
-		
+
 		return $response;
 	}
 
@@ -267,7 +325,7 @@ class RestPlugin extends GatewayPlugin {
 			'sectionId' => $article->getSectionId(),
 			'sectionTitle' => $article->getSectionTitle()
 		);
-		
+
 		$articleGalleyDAO =& DAORegistry::getDAO('ArticleGalleyDAO');
 		$articleGalleys =& $articleGalleyDAO->getGalleysByArticle($articleId);
 		$galleysResponse = array();
@@ -281,7 +339,7 @@ class RestPlugin extends GatewayPlugin {
     			$galleysResponse[] = $galleyInfo;
 		}
 		$response['galleys'] = $galleysResponse;
-		
+
 		// Add some optional metadata.  There may be other items the could be included here.
 		if($article->getLocalizedDiscipline()) $response['discipline'] = $article->getLocalizedDiscipline();
 		if($article->getLocalizedSubjectClass()) $response['subjectClass'] = $article->getLocalizedSubjectClass();
@@ -293,6 +351,10 @@ class RestPlugin extends GatewayPlugin {
 
 		return $response;
 	 }
+
+	function preventRedirect($url) {
+		return TRUE;
+	}
 }
 
 ?>
