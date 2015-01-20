@@ -11,9 +11,11 @@
   *
   * $Id$
   -->
- 
+
 <locale name="en_US" full_name="U.S. English">
 	<message key="plugins.gateways.rest.displayName">REST API Plugin</message>
 	<message key="plugins.gateways.rest.description">This plugin allows external sources to query this journal for information, returned to the source in JSON format.</message>
 	<message key="plugins.gateways.rest.errors.errorMessage">Unable to parse request.</message>
+	<message key="plugins.gateways.rest.settings">Settings</message>
+	<message key="plugins.gateways.rest.settings.apiKey">API Key</message>
 </locale>

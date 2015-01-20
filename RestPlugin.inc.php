@@ -15,6 +15,7 @@
 
 import('classes.plugins.GatewayPlugin');
 import('classes.file.PublicFileManager');
+import('classes.user.UserDAO');
 
 class RestPlugin extends GatewayPlugin {
 	/**
@@ -55,7 +56,43 @@ class RestPlugin extends GatewayPlugin {
 		return AppLocale::translate('plugins.gateways.rest.description');
 	}
 
-	/**
+	function getManagementVerbs() {
+		$verbs = parent::getManagementVerbs();
+		if (!$this->getEnabled()) return $verbs;
+		$verbs[] = array(
+			'settings', __('plugins.gateways.metsGateway.settings')
+		);
+		return $verbs;
+	}
+
+	function manage($verb, $args) {
+		if (parent::manage($verb, $args)) return true;
+		if (!$this->getEnabled()) return false;
+		switch ($verb) {
+			case 'settings':
+				$journal =& Request::getJournal();
+				$this->import('SettingsForm');
+				$form = new SettingsForm($this, $journal->getId());
+				if (Request::getUserVar('save')) {
+					$form->readInputData();
+					if ($form->validate()) {
+						$form->execute();
+						Request::redirect(null, null, 'plugins');
+					} else {
+						$form->display();
+					}
+				} else {
+					$form->initData();
+					$form->display();
+				}
+				break;
+			default:
+				return false;
+		}
+		return true;
+	}
+
+  /**
 	 * Handle fetch requests for this plugin.
 	 * @param $args array
 	 * @param $request PKPRequest
@@ -68,9 +105,18 @@ class RestPlugin extends GatewayPlugin {
 		$journal =& $request->getJournal();
 		if (!isset($journal)) $this->showError();
 
-		$issueDao =& DAORegistry::getDAO('IssueDAO');
-
 		$journalId = $journal->getId();
+
+		// Check request is authenticated via API Key.
+		$apiKey = $request->getUserVar('apiKey');
+		if (is_null($apiKey) || $apiKey != $this->getSetting($journalId, 'apiKey')) {
+			return false;
+		}
+
+		// Ensure user is authenticated.
+		$user = new UserDAO();
+
+		$issueDao =& DAORegistry::getDAO('IssueDAO');
 
 		$operator = array_shift($args);
 		switch ($operator) {
